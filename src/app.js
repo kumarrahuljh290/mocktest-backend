@@ -13,7 +13,7 @@ const allowedOrigins = [
     "https://yourdomain.com",
     "https://www.yourdomain.com",
     "https://app.yourdomain.com",
-    "http://localhost:5173/"
+    "http://localhost:5173"
 ];
 
 
