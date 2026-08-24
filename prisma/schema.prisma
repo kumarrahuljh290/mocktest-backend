@@ -1,0 +1,434 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. USER & IDENTITY MANAGEMENT
+// ==========================================
+
+model User {
+  id               String        @id @default(uuid())
+  email            String        @unique
+  phone            String?       @unique
+  name             String?
+  passwordHash     String?
+  role             Role          @default(STUDENT)
+  isVerified       Boolean       @default(false)
+  
+  // Account Lifecycle Control
+  accountStatus    AccountStatus @default(ACTIVE)
+  deactivatedAt    DateTime?     // When user deleted their own account
+  statusReason     String?       // Reason for admin suspension (e.g., "Fraudulent activity")
+
+  // Billing & External
+  gatewayProfileId String?
+  oauthAccounts    OAuthAccount[]
+  
+  // Relations
+  subscriptions    Subscription[]
+  transactions     Transaction[]
+  testAttempts     TestAttempt[]
+  leaderboards     Leaderboard[]
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([email])
+  @@index([phone])
+  @@index([accountStatus])
+}
+
+enum Role {
+  STUDENT
+  CONTENT_CREATOR
+  ADMIN
+  SUPERADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  DEACTIVATED_BY_USER  // Soft delete by the user
+  SUSPENDED_BY_ADMIN   // Banned or blocked by admin
+}
+
+model OAuthAccount {
+  id             String   @id @default(uuid())
+  userId         String
+  provider       String   // google, github, apple
+  providerUserId String
+  accessToken    String?  @db.Text
+  refreshToken   String?  @db.Text
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+}
+
+// ==========================================
+// 2. MONETIZATION (DECOUPLED ARCHITECTURE)
+// ==========================================
+
+model Product {
+  id              String   @id @default(uuid())
+  name            String   // e.g., "Banking Maha Pack 2026", "SBI PO Quant Sectional"
+  slug            String   @unique
+  description     String?  @db.Text
+  price           Decimal  @db.Decimal(10, 2)
+  discountPrice   Decimal? @db.Decimal(10, 2)
+  validityDays    Int      // e.g., 365 or 30
+  isActive        Boolean  @default(true)
+  features        Json?    // ["100+ Mocks", "Video Solutions"]
+  
+  // Relations
+  entitlements    ProductEntitlement[]
+  subscriptions   Subscription[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// The core of the scalable architecture. 
+// A product can grant access to an entire Collection branch OR a single Test.
+model ProductEntitlement {
+  id              String      @id @default(uuid())
+  productId       String
+  collectionId    String?     // Unlocks this collection and ALL nested children
+  testId          String?     // Unlocks ONLY a specific test
+  
+  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collection      Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  test            Test?       @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  // A constraint should be enforced at the app level: MUST have either collectionId OR testId
+  @@index([productId])
+  @@index([collectionId])
+  @@index([testId])
+}
+
+model Subscription {
+  id              String             @id @default(uuid())
+  userId          String
+  productId       String
+  status          SubscriptionStatus @default(ACTIVE)
+  
+  startDate       DateTime           @default(now())
+  endDate         DateTime
+  
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product         Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  transactions    Transaction[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // Extremely important index for fast access resolution check
+  @@index([userId, status, endDate]) 
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELED
+}
+
+model Transaction {
+  id                 String            @id @default(uuid())
+  userId             String
+  subscriptionId     String?
+  amount             Decimal           @db.Decimal(10, 2)
+  currency           String            @default("INR")
+  status             TransactionStatus @default(PENDING)
+  
+  gatewayReferenceId String            @unique 
+  couponCode         String?
+  discountApplied    Decimal?          @db.Decimal(10, 2)
+  
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription       Subscription?     @relation(fields: [subscriptionId], references: [id])
+
+  createdAt          DateTime          @default(now())
+
+  @@index([userId, status])
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+// ==========================================
+// 3. CONTENT GRAPH (INFINITE NESTING)
+// ==========================================
+
+// Replaces Category/Exam/TestSeries with a single recursive tree
+model Collection {
+  id              String           @id @default(uuid())
+  name            String           // e.g., "Banking", "SBI PO", "Prelims Mocks"
+  slug            String           @unique
+  type            CollectionType   
+  
+  // Self-referencing relationship (Adjacency List)
+  parentId        String?
+  parent          Collection?      @relation("CollectionHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Collection[]     @relation("CollectionHierarchy")
+  
+  tests           CollectionTest[]
+  entitlements    ProductEntitlement[]
+  
+  isPublished     Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([parentId])
+  @@index([type])
+}
+
+enum CollectionType {
+  ROOT_CATEGORY    // e.g., Banking, SSC
+  EXAM             // e.g., SBI PO, RRB NTPC
+  TEST_SERIES      // e.g., Prelims Mocks 2026
+  SUBJECT_BUNDLE   // e.g., Quant Sectionals
+}
+
+// Pivot table mapping Tests to Collections
+model CollectionTest {
+  collectionId    String
+  testId          String
+  order           Int         @default(0) // Order of test within the collection
+  
+  collection      Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  test            Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, testId])
+  @@index([testId])
+}
+
+model Test {
+  id                 String           @id @default(uuid())
+  title              String
+  slug               String           @unique
+  type               TestType         @default(FULL_MOCK)
+  
+  totalDuration      Int              // In seconds
+  totalMarks         Int
+  availableLanguages String[]         // ["EN", "HI"]
+  calculatorType     Calculator       @default(NONE)
+  strictNavigation   Boolean          @default(false) 
+  
+  // Time window for LIVE tests
+  liveStartTime      DateTime?
+  liveEndTime        DateTime?
+  
+  collections        CollectionTest[]
+  entitlements       ProductEntitlement[] // Direct unlocks
+  
+  sections           TestSection[]
+  attempts           TestAttempt[]
+  leaderboards       Leaderboard[]
+  
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([type])
+}
+
+enum TestType {
+  FULL_MOCK
+  SECTIONAL
+  TOPIC
+  PREVIOUS_YEAR
+  LIVE
+}
+
+enum Calculator {
+  NONE
+  BASIC
+  SCIENTIFIC
+}
+
+// ==========================================
+// 4. TEST ENGINE & QUESTION BANK
+// ==========================================
+
+model TestSection {
+  id            String         @id @default(uuid())
+  testId        String
+  name          String         
+  duration      Int?           // Sectional timing constraint
+  order         Int
+  cutoffMarks   Decimal?       @db.Decimal(6, 2)
+  
+  test          Test           @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testQuestions TestQuestion[] 
+
+  @@index([testId])
+}
+
+model QuestionContext {
+  id         String     @id @default(uuid())
+  title      String?    // e.g., "DI: Company Sales 2020-2022"
+  content    Json       // Multilingual context
+  mediaUrls  String[]
+  questions  Question[] 
+  
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Question {
+  id              String           @id @default(uuid())
+  subject         String           
+  topic           String           
+  difficulty      Difficulty       @default(MEDIUM)
+  type            QuestionType     @default(SINGLE_CHOICE)
+  mediaUrls       String[]
+  
+  contextId       String?
+  context         QuestionContext? @relation(fields: [contextId], references: [id], onDelete: SetNull)
+  
+  content         Json             // Multilingual question text
+  solution        Json?            // Multilingual explanation / Video URL
+  
+  options         Option[]
+  testOccurrences TestQuestion[]
+  
+  createdAt       DateTime         @default(now())
+
+  @@index([subject, topic])
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  NUMERIC_INPUT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Option {
+  id         String   @id @default(uuid())
+  questionId String
+  content    Json     
+  isCorrect  Boolean  @default(false)
+  order      Int
+  
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model TestQuestion {
+  id            String       @id @default(uuid())
+  sectionId     String
+  questionId    String
+  order         Int
+  
+  marks         Decimal      @db.Decimal(4, 2) 
+  negativeMarks Decimal      @db.Decimal(4, 2) 
+  
+  section       TestSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question      Question     @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  answers       UserAnswer[]
+  
+  @@unique([sectionId, order])
+  @@index([questionId])
+}
+
+// ==========================================
+// 5. ATTEMPT & ANALYTICS (WRITE-HEAVY ISOLATION)
+// ==========================================
+
+model TestAttempt {
+  id            String        @id @default(uuid())
+  userId        String
+  testId        String
+  status        AttemptStatus
+  testMode      AttemptMode   @default(PRACTICE) // To isolate Live from Practice Leaderboards
+  
+  startedAt     DateTime      @default(now())
+  submittedAt   DateTime?
+  
+  score         Decimal?      @db.Decimal(6, 2)
+  accuracy      Decimal?      @db.Decimal(5, 2)
+  percentile    Decimal?      @db.Decimal(5, 2)
+  timeSpent     Int?          // Total seconds
+  
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test          Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
+  answers       UserAnswer[]
+  
+  // Crucial composite index for analytics & fetching history quickly
+  @@index([userId, testId, status])
+  @@index([testId, testMode])
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
+  ABANDONED
+}
+
+enum AttemptMode {
+  PRACTICE
+  LIVE_LEADERBOARD
+}
+
+model UserAnswer {
+  id               String        @id @default(uuid())
+  attemptId        String
+  testQuestionId   String
+  
+  state            QuestionState @default(UNVISITED)
+  
+  selectedOptionIds String[]     // Holds selections
+  textResponse     String?       // For NAT types
+  
+  timeTakenSec     Int           @default(0)
+  isCorrect        Boolean?
+  marksAwarded     Decimal?      @db.Decimal(4, 2)
+  
+  attempt          TestAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestion     TestQuestion  @relation(fields: [testQuestionId], references: [id])
+
+  @@unique([attemptId, testQuestionId])
+  // Index on state allows fast calculation of "How many marked for review?"
+  @@index([attemptId, state])
+}
+
+enum QuestionState {
+  UNVISITED
+  SKIPPED              
+  ANSWERED             
+  MARKED_FOR_REVIEW    
+  ANSWERED_AND_MARKED  
+}
+
+model Leaderboard {
+  id         String   @id @default(uuid())
+  testId     String
+  userId     String
+  score      Decimal  @db.Decimal(6, 2)
+  rank       Int
+  percentile Decimal  @db.Decimal(5, 2)
+  
+  test       Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, userId])
+  @@index([testId, rank])
+}
