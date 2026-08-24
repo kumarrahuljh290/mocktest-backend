@@ -14,7 +14,7 @@ export const transporter = nodemailer.createTransport({
 export const sendOtpEmail = async (to, otp) => {
   const mailOptions = {
     from: `"Testbook" <${process.env.EMAIL_USER}>`,
-    to,
+    to:"goutamkumar42010@gmail.com",
     subject: "Your OTP Code",
     html: `
       <h2>Verify Your Account</h2>

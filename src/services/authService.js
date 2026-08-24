@@ -143,25 +143,27 @@ export class AuthService {
     }
 
     static async resendVerificationOtp(email) {
-        // 1. Generate new OTP
         const otp = generateOTP();
         const hashedOTP = await hashValue(otp);
 
-        // 2. Delete any old OTPs for this email so they don't conflict
         await prisma.otp.deleteMany({ where: { email } });
 
-        // 3. Save new OTP
         await prisma.otp.create({
             data: {
                 email,
                 code: hashedOTP,
                 type: "REGISTER", 
-                // Note: you may need to import addMinutes, or do: new Date(Date.now() + 10 * 60000)
                 expiresAt: new Date(Date.now() + 10 * 60000), 
             },
         });
 
-        // 4. Send Email
-        sendOtpEmail(email, otp).catch(console.error);
+        // CHANGE THIS: Add try/catch and await so we can see the exact email error in Render logs
+        try {
+            console.log("Attempting to send email via Nodemailer...");
+            await sendOtpEmail(email, otp);
+            console.log("Email sent successfully!");
+        } catch (emailError) {
+            console.error("CRITICAL EMAIL ERROR:", emailError);
+        }
     }
 }
