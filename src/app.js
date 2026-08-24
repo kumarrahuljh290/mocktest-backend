@@ -17,7 +17,6 @@ app.use(cookieParser());
 
 app.use(cors())
 app.use("/users", authRoute);
-app.use("/api/v1/collections", collectionRoutes); // (Previously series)
 app.use("/api/v1/tests", testRoutes);             // For Admin Test Management & Student fetching
 app.use("/api/v1/questions", questionRoutes);     // Admin Question Bank
 app.use("/api/v1/attempts", attemptRoutes);       // Student Exam Taking Engine
