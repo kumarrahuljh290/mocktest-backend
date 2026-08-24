@@ -35,28 +35,41 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
     try {
         const user = await AuthService.loginUser(req.body);
-        const token = createJwtToken(user);
 
+        // 1. Check verification FIRST
         if (!user.isVerified) {
-            // Re-trigger OTP logic can be called here
+            
+            // Generate and send the OTP (you need to create this function in AuthService)
+            await AuthService.resendVerificationOtp(user.email); 
+
+            // Tell frontend to go to the OTP screen
             return res.status(200).json({
-                success: true,
-                message: "Please verify your account.",
+                success: true, // Returning 200 is fine if your frontend expects the 'action' flag
+                message: "Please verify your account. A new OTP has been sent.",
                 data: { action: "VERIFY_ACCOUNT", email: user.email }
             });
         }
 
+        // 2. Generate token ONLY if the user is verified
+        const token = createJwtToken(user);
         setAuthCookie(res, token);
 
+        // 3. Send successful login response
         return res.status(200).json({
             success: true,
             message: "Login successful",
             data: { user }
         });
+
     } catch (error) {
         if (error.code === "INVALID_CREDENTIALS") {
             return res.status(401).json({ success: false, message: "Invalid email or password" });
         }
+        if (error.code === "ACCOUNT_SUSPENDED" || error.code === "ACCOUNT_DEACTIVATED") {
+            return res.status(403).json({ success: false, message: error.message });
+        }
+        
+        console.error("[Login Error]:", error);
         return res.status(500).json({ success: false, message: "Internal server error" });
     }
 };
