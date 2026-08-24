@@ -71,6 +71,18 @@ model OAuthAccount {
   @@index([userId])
 }
 
+model Otp {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  type      String   // e.g., "REGISTER", "PASSWORD_RESET"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
 // ==========================================
 // 2. MONETIZATION (DECOUPLED ARCHITECTURE)
 // ==========================================
