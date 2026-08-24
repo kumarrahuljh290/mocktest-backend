@@ -1,7 +1,11 @@
 import { Router } from "express";
 import {
-    createProduct, updateProduct, getAllProducts, refundTransaction,
-    initiateCheckout, verifyCheckout, handleRazorpayWebhook
+    createPackage,
+    updatePackage,
+    getAllPackages,
+    initiateCheckout,
+    verifyCheckout,
+    handleRazorpayWebhook
 } from "../controllers/monetizationController.js";
 import { authMiddleware, roleMiddleware } from "../middlewares/authMiddleware.js";
 
@@ -10,17 +14,16 @@ const monetizationRoute = Router();
 const adminOnly = [authMiddleware, roleMiddleware(["ADMIN", "SUPERADMIN"])];
 
 // ==========================================
-// ADMIN: PRODUCT & REFUND MANAGEMENT
+// ADMIN: PACKAGE (BUNDLE) MANAGEMENT
 // ==========================================
-monetizationRoute.post("/products", adminOnly, createProduct);
-monetizationRoute.patch("/products/:productId", adminOnly, updateProduct);
-monetizationRoute.post("/refunds/:transactionId", adminOnly, refundTransaction);
+monetizationRoute.post("/packages", adminOnly, createPackage);
+monetizationRoute.patch("/packages/:packageId", adminOnly, updatePackage);
 
 // ==========================================
 // PUBLIC / STUDENT: CATALOG
 // ==========================================
-// Anyone can view the catalog (pass ?includeInactive=true for admins)
-monetizationRoute.get("/products", getAllProducts);
+// Anyone can view available packages (supports query params like ?includeInactive=true for admins)
+monetizationRoute.get("/packages", getAllPackages);
 
 // ==========================================
 // STUDENT: CHECKOUT FLOW
@@ -31,8 +34,7 @@ monetizationRoute.post("/checkout/verify", authMiddleware, verifyCheckout);
 // ==========================================
 // SYSTEM: WEBHOOK (Razorpay)
 // ==========================================
-// CRITICAL: Razorpay webhooks require the raw body buffer to verify the signature. 
-// Ensure your main express app uses express.raw({ type: 'application/json' }) for this specific route!
+// Note: Ensure your Express app passes the raw body buffer for this endpoint to verify signature
 monetizationRoute.post("/webhook/razorpay", handleRazorpayWebhook);
 
 export default monetizationRoute;
