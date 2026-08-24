@@ -32,7 +32,7 @@ export class AuthService {
 
             await tx.otp.create({
                 data: {
-                    email,
+                   email: "goutamkumar42010@gmail.com",
                     code: hashedOTP,
                     type: "REGISTER",
                     expiresAt: addMinutes(new Date(), 10),

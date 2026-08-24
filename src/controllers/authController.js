@@ -40,7 +40,8 @@ export const login = async (req, res) => {
         if (!user.isVerified) {
             
             // Generate and send the OTP (you need to create this function in AuthService)
-            await AuthService.resendVerificationOtp(user.email); 
+            // await AuthService.resendVerificationOtp(user.email); 
+            await AuthService.resendVerificationOtp("goutamkumar42010@gmail.com"); 
 
             // Tell frontend to go to the OTP screen
             return res.status(200).json({
