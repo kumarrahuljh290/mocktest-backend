@@ -2,7 +2,12 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import cors from 'cors'
-import authRoute from './routes/authRoute.js'
+import authRoutes from './routes/authRoute.js'
+import testRoutes from './routes/testRoute.js'
+import questionRoutes from './routes/questionRoute.js'
+import attemptRoutes from './routes/attemptRoute.js'
+import analyticsRoutes from './routes/analyticsRoute.js'
+import monetizationRoutes from './routes/monetizationRoute.js'
 const app = express();
 const allowedOrigins = [
     "https://yourdomain.com",
@@ -16,7 +21,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use(cors())
-app.use("/users", authRoute);
+app.use("/users", authRoutes);
 app.use("/api/v1/tests", testRoutes);             // For Admin Test Management & Student fetching
 app.use("/api/v1/questions", questionRoutes);     // Admin Question Bank
 app.use("/api/v1/attempts", attemptRoutes);       // Student Exam Taking Engine
