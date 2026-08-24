@@ -52,10 +52,23 @@ export class AuthService {
     static async loginUser({ email, password }) {
         const user = await prisma.user.findUnique({ where: { email } });
 
-        // Generic error message to prevent email enumeration (Security Best Practice)
+        // Generic error message to prevent email enumeration
         if (!user || !user.passwordHash || !(await compareValue(password, user.passwordHash))) {
             const error = new Error("Invalid email or password");
             error.code = "INVALID_CREDENTIALS";
+            throw error;
+        }
+
+        // NEW: Check if the account is suspended or deactivated
+        if (user.accountStatus === "SUSPENDED_BY_ADMIN") {
+            const error = new Error("This account has been suspended.");
+            error.code = "ACCOUNT_SUSPENDED";
+            throw error;
+        }
+        
+        if (user.accountStatus === "DEACTIVATED_BY_USER") {
+            const error = new Error("This account was deactivated. Please contact support.");
+            error.code = "ACCOUNT_DEACTIVATED";
             throw error;
         }
 

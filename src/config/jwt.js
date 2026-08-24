@@ -9,8 +9,7 @@ const getSecretKey = () => {
 };
 
 // Application constants for standardizing token validation
-const JWT_ISSUER = "mocktest-engine-api";
-const JWT_AUDIENCE = "mocktest-engine-client";
+
 
 /**
  * Creates an Access Token
@@ -30,8 +29,8 @@ export const createJwtToken = (userData) => {
         {
             algorithm: "HS256",
             expiresIn: "8h", // Extended to prevent mid-exam lockouts
-            issuer: JWT_ISSUER,
-            audience: JWT_AUDIENCE
+            issuer: process.env.JWT_ISSUER,
+            audience: process.env.JWT_AUDIENCE
         }
     );
 };
