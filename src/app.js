@@ -22,7 +22,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use(cors())
-app.use("/users", authRoutes);
+app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/tests", testRoutes);             // For Admin Test Management & Student fetching
 app.use("/api/v1/questions", questionRoutes);     // Admin Question Bank
 app.use("/api/v1/attempts", attemptRoutes);       // Student Exam Taking Engine
