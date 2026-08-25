@@ -5,8 +5,8 @@ import { createJwtToken } from "../config/jwt.js";
 const setAuthCookie = (res, token) => {
     res.cookie("access_token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: true, // 👈 CRITICAL: Must be true when sameSite is "none"
+        sameSite: "none", // 👈 CRITICAL: Allows cookies across different domains (Frontend -> Backend)
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Days
     });
 };
@@ -38,14 +38,12 @@ export const login = async (req, res) => {
 
         // 1. Check verification FIRST
         if (!user.isVerified) {
-            
-            // Generate and send the OTP (you need to create this function in AuthService)
+            // Generate and send the OTP
             await AuthService.resendVerificationOtp(user.email); 
-            
 
             // Tell frontend to go to the OTP screen
             return res.status(200).json({
-                success: true, // Returning 200 is fine if your frontend expects the 'action' flag
+                success: true,
                 message: "Please verify your account. A new OTP has been sent.",
                 data: { action: "VERIFY_ACCOUNT", email: user.email }
             });
@@ -93,12 +91,11 @@ export const verifyOtp = async (req, res) => {
       user: {
         id: user._id, // Adjust based on your DB (e.g., user.id for SQL)
         email: user.email,
-        name: user.name // Send back basic info the frontend UI might need
+        name: user.name
       }
     });
 
   } catch (error) {
-    // 4. Handle known client errors
     if (error.code === "INVALID_OTP") {
       return res.status(400).json({ success: false, message: "Invalid OTP provided." });
     }
@@ -111,7 +108,6 @@ export const verifyOtp = async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found." });
     }
 
-    // 5. Catch-all for unexpected server errors
     console.error("[AuthController] Verify OTP Error:", error);
     return res.status(500).json({ 
       success: false, 
@@ -120,13 +116,11 @@ export const verifyOtp = async (req, res) => {
   }
 };
 
-
 // ==========================================
 // Auth0 / OAuth Controller
 // ==========================================
 export const auth0Callback = async (req, res) => {
     try {
-        // In a real Auth0 setup, this data comes from the Auth0 SDK or decoded ID token
         const { provider, providerUserId, email, name, tokens } = req.body; 
 
         const user = await AuthService.handleOAuthLogin({
@@ -152,6 +146,11 @@ export const auth0Callback = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
-    res.clearCookie("access_token");
+    // 👈 CRITICAL: You must pass the exact same flags to clear a cross-origin cookie!
+    res.clearCookie("access_token", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
     return res.status(200).json({ success: true, message: "Logged out successfully" });
 };
