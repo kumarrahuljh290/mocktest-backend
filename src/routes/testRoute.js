@@ -33,12 +33,12 @@ testRoute.delete("/:testId", adminOnly, deleteTest);
 testRoute.get("/:testId", authMiddleware, getTestById);
 
 // 2. Start the test (Creates an Attempt, checks LIVE window)
-testRoute.post("/:testId/start", authMiddleware, startTest);
+// testRoute.post("/:testId/start", authMiddleware, startTest);
 
 // 3. Sync Answer (Fired when user clicks "Save & Next" or "Mark for Review")
-testRoute.post("/attempt/:attemptId/sync", authMiddleware, syncAnswer);
+// testRoute.post("/attempt/:attemptId/sync", authMiddleware, syncAnswer);
 
 // 4. Final Submit (Evaluates the test based on iON logic)
-testRoute.post("/attempt/:attemptId/submit", authMiddleware, submitTest);
+// testRoute.post("/attempt/:attemptId/submit", authMiddleware, submitTest);
 
 export default testRoute;
