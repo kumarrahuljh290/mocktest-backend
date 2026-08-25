@@ -15,7 +15,7 @@ for (const envVar of REQUIRED_ENV_VARS) {
 // 2. Resilient Transport Layer
 export const transporter = nodemailer.createTransport({
   host: "smtp-relay.brevo.com",
-  port: 587, // Standard port for Brevo SMTP
+  port: 2525, // Standard port for Brevo SMTP
   secure: false, // false for 587, Nodemailer will automatically upgrade to TLS via STARTTLS
   requireTLS: true, // Strictly enforce TLS encryption
   auth: {
