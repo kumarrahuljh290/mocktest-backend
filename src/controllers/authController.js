@@ -75,6 +75,52 @@ export const login = async (req, res) => {
     }
 };
 
+export const verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    
+    // 1. Verify OTP against the database
+    const user = await AuthService.verifyOTP(email, otp);
+
+    // 2. Generate JWT token and set HttpOnly cookie
+    const token = createJwtToken(user);
+    setAuthCookie(res, token);
+
+    // 3. Return a success response to the frontend
+    return res.status(200).json({
+      success: true,
+      message: "Account verified and logged in successfully.",
+      user: {
+        id: user._id, // Adjust based on your DB (e.g., user.id for SQL)
+        email: user.email,
+        name: user.name // Send back basic info the frontend UI might need
+      }
+    });
+
+  } catch (error) {
+    // 4. Handle known client errors
+    if (error.code === "INVALID_OTP") {
+      return res.status(400).json({ success: false, message: "Invalid OTP provided." });
+    }
+    
+    if (error.code === "EXPIRED_OTP") {
+      return res.status(400).json({ success: false, message: "OTP has expired. Please request a new one." });
+    }
+    
+    if (error.code === "USER_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    // 5. Catch-all for unexpected server errors
+    console.error("[AuthController] Verify OTP Error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "An internal server error occurred during verification." 
+    });
+  }
+};
+
+
 // ==========================================
 // Auth0 / OAuth Controller
 // ==========================================

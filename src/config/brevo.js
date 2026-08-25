@@ -35,6 +35,7 @@ export const transporter = nodemailer.createTransport({
 // 3. Robust Service Function
 export const sendOtpEmail = async (to, otp) => {
   // Input Validation
+  console.info(`[EmailService] Preparing to send OTP to: ${to}: otp - ${otp}`);
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
     throw new Error("Invalid recipient email address provided.");
   }
