@@ -45,7 +45,7 @@ export const verifyJwtToken = (token) => {
     // This will throw an error if the token is invalid or expired
     return jwt.verify(token, getSecretKey(), {
         algorithms: ["HS256"], // Strictly enforce algorithm to prevent downgrade attacks
-        issuer: JWT_ISSUER,
-        audience: JWT_AUDIENCE
+        issuer: process.env.JWT_ISSUER,      // ✅ FIXED: Added process.env.
+        audience: process.env.JWT_AUDIENCE   // ✅ FIXED: Added process.env.
     });
 };
