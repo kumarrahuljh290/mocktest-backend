@@ -14,7 +14,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",           // Vite local
   "http://localhost:3000",           // React / Next.js local
-  "https://your-frontend.vercel.app" // Replace with your actual live domain (no trailing slash)
+  "https://your-frontend.vercel.app", // Replace with your actual live domain (no trailing slash)
+  "https://iridescent-salmiakki-52fa62.netlify.app"
 ];
 
 const corsOptions = {
