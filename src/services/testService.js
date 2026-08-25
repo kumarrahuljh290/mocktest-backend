@@ -80,7 +80,7 @@ export class TestService {
                 _count: {
                     select: {
                         children: true, // Number of sub-categories inside
-                        tests: true     // Number of tests mapped to this collection
+                        tests: false     // Number of tests mapped to this collection
                     }
                 }
             }
