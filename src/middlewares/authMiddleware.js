@@ -8,7 +8,9 @@ import { verifyJwtToken } from "../config/jwt.js";
 export const authMiddleware = (req, res, next) => {
     try {
         let token = null;
-
+console.log("Auth Middleware: Checking for token in request...");
+console.log("Auth Header: ", req.get("Authorization") || req.headers.authorization);
+console.log("Cookies: ", req.cookies);
         // 1. Check Authorization header
         const authHeader = req.get("Authorization") || req.headers.authorization;
         if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -48,6 +50,7 @@ export const authMiddleware = (req, res, next) => {
 
         next();
     } catch (error) {
+        console.error("JWT Verification Error:", error.message, error.name);
         if (error.name === "TokenExpiredError") {
             return res.status(401).json({
                 success: false,
