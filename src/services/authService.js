@@ -1,7 +1,7 @@
 import prisma from "../config/prisma.js";
 import { hashValue, compareValue } from "../config/bcrypt.js";
 import { generateOTP } from "../utils/helper.js";
-import { sendOtpEmail } from "../config/brevo.js";
+import { sendOtpEmail } from "../config/brevoForTest.js";
 import { addMinutes } from "date-fns";
 
 export class AuthService {
