@@ -69,12 +69,20 @@ export const getCollectionDetails = async (req, res) => {
 
 export const getCollectionById = async (req, res) => {
     try {
-        const collection = await TestService.getCollectionById(req.params.collectionId);
-        if (!collection) {
+        // 1. FIXED: Calling the correct method name
+        const collection = await TestService.getCollectionDetails(req.params.collectionId);
+        
+        // 2. Success Response
+        res.status(200).json({ success: true, data: collection });
+
+    } catch (error) {
+        // 3. FIXED: Handle the specific "Not Found" error from the service
+        if (error.message === "Collection not found") {
             return res.status(404).json({ success: false, message: "Collection not found." });
         }
-        res.status(200).json({ success: true, data: collection });
-    } catch (error) {
+
+        // Always log 500 errors so you can debug them in the terminal!
+        console.error("Get Collection Error:", error);
         res.status(500).json({ success: false, message: "Failed to fetch collection." });
     }
 };
