@@ -122,25 +122,48 @@ export class AuthService {
         });
     }
 
-    static async verifyOTP(email, otp) {
-        const record = await prisma.otp.findFirst({
-            where: { email, type: "REGISTER", used: false },
-            orderBy: { createdAt: "desc" },
-        });
+   static async verifyOTP(email, otp) {
+    // 1. Find the most recent OTP for this email
+    const record = await prisma.otp.findFirst({
+        where: { email, type: "REGISTER" },
+        orderBy: { createdAt: "desc" },
+    });
 
-        if (!record) throw new Error("OTP_NOT_FOUND");
-        if (record.expiresAt < new Date()) throw new Error("OTP_EXPIRED");
-
-        const isValid = await compareValue(otp, record.code);
-        if (!isValid) throw new Error("INVALID_OTP");
-
-        await prisma.$transaction([
-            prisma.user.update({ where: { email }, data: { isVerified: true } }),
-            prisma.otp.update({ where: { id: record.id }, data: { used: true } })
-        ]);
-
-        return true;
+    // 2. Validate OTP existence and expiration
+    if (!record) {
+        const err = new Error("No OTP found for this user.");
+        err.code = "USER_NOT_FOUND";
+        throw err;
     }
+    
+    if (record.expiresAt < new Date()) {
+        const err = new Error("OTP has expired.");
+        err.code = "EXPIRED_OTP";
+        throw err;
+    }
+
+    // 3. Verify the actual code
+    const isValid = await compareValue(otp, record.code); // assuming bcrypt.compare
+    if (!isValid) {
+        const err = new Error("Invalid OTP provided.");
+        err.code = "INVALID_OTP";
+        throw err;
+    }
+
+    // 4. Atomic Transaction: Verify user AND delete the used OTP simultaneously
+    const [updatedUser, deletedOtp] = await prisma.$transaction([
+        prisma.user.update({ 
+            where: { email }, 
+            data: { isVerified: true } 
+        }),
+        prisma.otp.delete({ 
+            where: { id: record.id } 
+        })
+    ]);
+
+    // 5. Return the user object so the controller can generate the JWT cookie!
+    return updatedUser;
+}
 
     static async resendVerificationOtp(email) {
         const otp = generateOTP();
