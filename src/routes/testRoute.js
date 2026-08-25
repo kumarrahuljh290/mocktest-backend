@@ -2,7 +2,9 @@ import { Router } from "express";
 import { 
     createCollection, updateCollection, deleteCollection,
     createTest, updateTest, deleteTest, getAllTests, getTestById,
-    startTest, syncAnswer, submitTest 
+    startTest, syncAnswer, submitTest, 
+    getCollectionById,
+    getAllCollections
 } from "../controllers/testController.js";
 import { authMiddleware, roleMiddleware } from "../middlewares/authMiddleware.js";
 
@@ -29,6 +31,8 @@ testRoute.delete("/:testId", adminOnly, deleteTest);
 // ==========================================
 // EXAM ENGINE ROUTES (Students)
 // ==========================================
+testRoute.get("/tests/collections", authMiddleware, getAllCollections);
+testRoute.get("/tests/collections/:id", authMiddleware, getCollectionById); // Fetch tests for a specific collection
 // 1. Fetch test data (Secured by recursive subscription check in controller)
 testRoute.get("/:testId", authMiddleware, getTestById);
 

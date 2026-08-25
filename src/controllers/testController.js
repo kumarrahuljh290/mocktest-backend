@@ -32,6 +32,53 @@ export const deleteCollection = async (req, res) => {
     }
 };
 
+export const getAllCollections = async (req, res) => {
+    try {
+        // Extract optional filters from query string
+        const { parentId, type, isPublished } = req.query;
+
+        const collections = await TestService.getAllCollections({
+            parentId,
+            type,
+            isPublished
+        });
+
+        res.status(200).json({
+            success: true,
+            count: collections.length,
+            data: collections
+        });
+    } catch (error) {
+        console.error("Get All Collections Error:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to fetch collections", 
+            error: error.message 
+        });
+    }
+};
+
+export const getCollectionDetails = async (req, res) => {
+    try {
+        const collection = await TestService.getCollectionDetails(req.params.collectionId);
+        res.status(200).json({ success: true, data: collection });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch collection details." });
+    }
+};
+
+export const getCollectionById = async (req, res) => {
+    try {
+        const collection = await TestService.getCollectionById(req.params.collectionId);
+        if (!collection) {
+            return res.status(404).json({ success: false, message: "Collection not found." });
+        }
+        res.status(200).json({ success: true, data: collection });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch collection." });
+    }
+};
+
 // ==========================================
 // 2. TESTS (Metadata & Admin Actions)
 // ==========================================

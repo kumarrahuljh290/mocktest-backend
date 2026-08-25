@@ -46,6 +46,80 @@ export class TestService {
 
         return collection;
     }
+
+    /**
+     * Fetch a lightweight list of collections.
+     * Ideal for listing pages, home screens, and trending grids.
+     */
+    static async getAllCollections(filters = {}) {
+        const { parentId, type, isPublished } = filters;
+
+        // Build query conditions dynamically
+        const where = {};
+        
+        // If parentId is explicitly 'null', fetch root collections
+        if (parentId !== undefined) {
+            where.parentId = parentId === 'null' ? null : parentId;
+        }
+        if (type) where.type = type;
+        if (isPublished !== undefined) {
+            where.isPublished = isPublished === 'true' || isPublished === true;
+        }
+
+        const collections = await prisma.collection.findMany({
+            where,
+            orderBy: { createdAt: 'desc' }, // Show newest first
+            select: {
+                id: true,
+                name: true,
+                slug: true,
+                type: true,
+                parentId: true,
+                isPublished: true,
+                // MAGIC TRICK: Get counts without fetching the actual heavy data!
+                _count: {
+                    select: {
+                        children: true, // Number of sub-categories inside
+                        tests: true     // Number of tests mapped to this collection
+                    }
+                }
+            }
+        });
+
+        return collections;
+    }
+    /**
+     * Fetch a single collection and its immediate contents (children & tests)
+     */
+    static async getCollectionDetails(collectionId) {
+        const collection = await prisma.collection.findUnique({
+            where: { id: collectionId },
+            include: {
+                // 1. Fetch Sub-collections (Folders inside this folder)
+                children: {
+                    where: { isPublished: true },
+                    select: { id: true, name: true, type: true, slug: true }
+                },
+                // 2. Fetch Actual Tests mapped to this collection
+                tests: {
+                    orderBy: { order: 'asc' },
+                    include: {
+                        test: {
+                            select: { 
+                                id: true, title: true, type: true, 
+                                totalDuration: true, totalMarks: true 
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!collection) throw new Error("Collection not found");
+        return collection;
+    }
+
+
     /**
      * Enterprise Access Check using Recursive CTE.
      * Resolves access if the user bought the exact test OR any parent collection nested infinitely deep.
