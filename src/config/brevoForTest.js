@@ -33,16 +33,52 @@ export const sendOtpEmail = async (to, otp) => {
         email: to,
       },
     ],
-    subject: "Your OTP Code - Action Required",
-    textContent: `Your OTP is: ${otp}. This OTP expires in 10 minutes. If you didn't request this, please ignore.`,
+    subject: "PrepMaster: Secure Verification Code",
+    textContent: `Your secure verification code is: ${otp}. This code expires in 10 minutes. If you did not request this, please ignore this email.`,
     htmlContent: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-        <h2>Verify Your Account</h2>
-        <p>Your OTP is:</p>
-        <h1 style="letter-spacing: 5px; background: #f4f4f4; padding: 15px; border-radius: 8px; text-align: center;">
-          ${otp}
-        </h1>
-        <p style="font-size: 14px; color: #666;">This OTP expires in 10 minutes. If you did not request this, please ignore this email.</p>
+      <div style="background-color: #f9fafb; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+        <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e5e7eb; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
+          
+          <!-- Premium Header -->
+          <div style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #f3f4f6;">
+            <h2 style="margin: 0; font-size: 22px; font-weight: 700; color: #111827; letter-spacing: -0.5px;">
+              <span style="color: #4f46e5;">Prep</span>Master
+            </h2>
+          </div>
+          
+          <!-- Body Content -->
+          <div style="padding: 40px;">
+            <h3 style="margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #111827;">Secure Verification</h3>
+            <p style="margin: 0 0 32px; font-size: 15px; line-height: 24px; color: #4b5563;">
+              You recently requested to securely log in or verify your account. Please enter the authentication code below to proceed.
+            </p>
+
+            <!-- High-Contrast OTP Container -->
+            <div style="background-color: #0f172a; border-radius: 12px; padding: 24px; text-align: center;">
+              <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 700; color: #ffffff; letter-spacing: 12px; margin-left: 12px;">
+                ${otp}
+              </span>
+            </div>
+
+            <!-- Expiry & Security Warning -->
+            <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #f3f4f6;">
+              <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">
+                <strong style="color: #111827;">Security Notice:</strong> This code will expire in exactly 10 minutes.
+              </p>
+              <p style="margin: 0; font-size: 13px; color: #9ca3af; line-height: 20px;">
+                If you did not initiate this request, please disregard this email. Your account remains completely secure.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Muted Footer -->
+        <div style="max-width: 500px; margin: 24px auto 0; text-align: center;">
+          <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+            © ${new Date().getFullYear()} PrepMaster. All rights reserved.
+          </p>
+        </div>
       </div>
     `,
   };
