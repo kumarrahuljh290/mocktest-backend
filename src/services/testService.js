@@ -6,7 +6,46 @@ export class TestService {
     // ==========================================
     // 1. SECURITY & ENTITLEMENT RESOLUTION
     // ==========================================
-    
+    // ==========================================
+    // 5. COLLECTION MANAGEMENT (ADMIN)
+    // ==========================================
+
+    /**
+     * Creates a new Collection (Category, Exam, Test Series, etc.)
+     * Supports infinite nesting via parentId.
+     */
+    static async createCollection(collectionData) {
+        const { name, type, parentId, isPublished } = collectionData;
+
+        if (!name || !type) {
+            throw new Error("Missing required fields: 'name' and 'type' are required.");
+        }
+
+        // Generate a unique slug to prevent collisions (e.g., "sbi-po-prelims-8f7a6b")
+        const baseSlug = slugify(name, { lower: true, strict: true });
+        const uniqueSlug = `${baseSlug}-${crypto.randomBytes(4).toString("hex")}`;
+
+        // If a parentId is provided, verify it actually exists first to provide a clean error
+        if (parentId) {
+            const parentExists = await prisma.collection.findUnique({ where: { id: parentId } });
+            if (!parentExists) {
+                throw new Error("Invalid parentId: Parent collection does not exist.");
+            }
+        }
+
+        // Create the collection
+        const collection = await prisma.collection.create({
+            data: {
+                name,
+                slug: uniqueSlug,
+                type,
+                parentId: parentId || null,
+                isPublished: isPublished || false,
+            },
+        });
+
+        return collection;
+    }
     /**
      * Enterprise Access Check using Recursive CTE.
      * Resolves access if the user bought the exact test OR any parent collection nested infinitely deep.
