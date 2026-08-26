@@ -51,6 +51,7 @@ export class AttemptService {
     // 2. TEST SUBMISSION & EVALUATION 
     // ==========================================
     static async submitAndEvaluateTest(userId, attemptId) {
+        console.log(`[Submit Test] User: ${userId}, Attempt: ${attemptId}`);
         return await prisma.$transaction(async (tx) => {
             const attempt = await tx.testAttempt.findUnique({
                 where: { id: attemptId },
