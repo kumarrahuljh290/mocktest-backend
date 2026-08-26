@@ -32,7 +32,8 @@ export class AttemptService {
                 state: data.state, 
                 selectedOptionIds: data.selectedOptionIds || [],
                 textResponse: data.textResponse || null,
-                timeTakenSec: { increment: data.timeSpentOnQuestion || 0 } 
+                // ✅ FIXED: Changed to match frontend payload
+                timeTakenSec: { increment: data.timeTakenSec || 0 } 
             },
             create: {
                 attemptId: attemptId,
@@ -40,7 +41,8 @@ export class AttemptService {
                 state: data.state,
                 selectedOptionIds: data.selectedOptionIds || [],
                 textResponse: data.textResponse || null,
-                timeTakenSec: data.timeSpentOnQuestion || 0
+                // ✅ FIXED: Changed to match frontend payload
+                timeTakenSec: data.timeTakenSec || 0 
             }
         });
     }

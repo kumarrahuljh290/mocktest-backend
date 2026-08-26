@@ -193,7 +193,9 @@ export class TestService {
 
         // Return existing attempt if in progress
         const existingAttempt = await prisma.testAttempt.findFirst({
-            where: { userId, testId, status: "IN_PROGRESS" }
+            where: { userId, testId, status: "IN_PROGRESS" },
+            // ✅ ADD THIS LINE: So the frontend gets the saved answers to resume!
+            include: { answers: true } 
         });
 
         if (existingAttempt) return existingAttempt;
