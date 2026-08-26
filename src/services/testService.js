@@ -321,7 +321,7 @@ export class TestService {
     // ==========================================
     
     static async getTestForStudent(userId, testId) {
-        await this.verifyStudentAccess(userId, testId);
+        // await this.verifyStudentAccess(userId, testId);
 
         const test = await prisma.test.findUnique({
             where: { id: testId },
