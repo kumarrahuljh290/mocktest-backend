@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import cors from 'cors'
 import authRoutes from './routes/authRoute.js'
+import userRoutes from './routes/userRoute.js'
 import testRoutes from './routes/testRoute.js'
 import questionRoutes from './routes/questionRoute.js'
 import attemptRoutes from './routes/attemptRoute.js'
@@ -41,6 +42,7 @@ app.use(cookieParser());
 
 
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/user", userRoutes); // For User Profile Management
 app.use("/api/v1/tests", testRoutes);             // For Admin Test Management & Student fetching
 app.use("/api/v1/questions", questionRoutes);     // Admin Question Bank
 app.use("/api/v1/attempts", attemptRoutes);       // Student Exam Taking Engine
