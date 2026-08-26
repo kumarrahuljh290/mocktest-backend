@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { startTest, syncAnswer, submitTest } from "../controllers/attemptController.js";
+import { startTest, syncAnswer, submitTest, getAttemptResult } from "../controllers/attemptController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 
 const attemptRoute = Router();
@@ -26,5 +26,5 @@ attemptRoute.put("/:attemptId/sync", syncAnswer);
 // ==========================================
 // Called when the user clicks "Final Submit" or the live timer runs out
 attemptRoute.post("/:attemptId/submit", submitTest);
-
+attemptRoute.get("/attempts/:attemptId", verifyAuth, getAttemptResult);
 export default attemptRoute;

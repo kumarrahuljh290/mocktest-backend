@@ -75,3 +75,18 @@ export const submitTest = async (req, res) => {
         res.status(500).json({ success: false, message: "Failed to evaluate test." });
     }
 };
+
+export const getAttemptResult = async (req, res) => {
+    try {
+        const { attemptId } = req.params;
+        const result = await AttemptService.getAttemptResult(req.user.id, attemptId);
+        
+        res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        console.error("[Get Attempt Result Error]:", error);
+        if (error.message === "UNAUTHORIZED_ATTEMPT") {
+            return res.status(403).json({ success: false, message: "Unauthorized access." });
+        }
+        res.status(500).json({ success: false, message: "Failed to fetch attempt result." });
+    }
+};

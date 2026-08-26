@@ -141,4 +141,22 @@ export class AttemptService {
             });
         });
     }
+
+    static async getAttemptResult(userId, attemptId) {
+        const attempt = await prisma.testAttempt.findUnique({
+            where: { id: attemptId },
+            include: {
+                test: {
+                    select: { title: true, totalMarks: true, type: true }
+                }
+                // We don't include 'answers' here to keep the scoreboard payload small and fast.
+                // You can fetch answers separately on the "Detailed Solutions" page.
+            }
+        });
+
+        if (!attempt) throw new Error("ATTEMPT_NOT_FOUND");
+        if (attempt.userId !== userId) throw new Error("UNAUTHORIZED_ATTEMPT");
+        
+        return attempt;
+    }
 }
