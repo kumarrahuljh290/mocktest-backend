@@ -26,5 +26,5 @@ attemptRoute.put("/:attemptId/sync", syncAnswer);
 // ==========================================
 // Called when the user clicks "Final Submit" or the live timer runs out
 attemptRoute.post("/:attemptId/submit", submitTest);
-attemptRoute.get("/attempts/:attemptId", verifyAuth, getAttemptResult);
+attemptRoute.get("/:attemptId", verifyAuth, getAttemptResult);
 export default attemptRoute;
