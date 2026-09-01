@@ -9,6 +9,7 @@ import questionRoutes from './routes/questionRoute.js'
 import attemptRoutes from './routes/attemptRoute.js'
 import analyticsRoutes from './routes/analyticsRoute.js'
 import monetizationRoutes from './routes/monetizationRoute.js'
+import creatorRoutes from './routes/creatorRoutes.js' // Creator Onboarding & Storefront
 const app = express();
 
 // --- 1. CORS CONFIGURATION (TOP OF FILE) ---
@@ -48,5 +49,5 @@ app.use("/api/v1/questions", questionRoutes);     // Admin Question Bank
 app.use("/api/v1/attempts", attemptRoutes);       // Student Exam Taking Engine
 app.use("/api/v1/analytics", analyticsRoutes);    // Student Reports & Live Leaderboards
 app.use("/api/v1/billing", monetizationRoutes);   // Razorpay, Subscriptions & Refunds
-app.use("/api/v1/creators", creatorRoutes);
+app.use("/api/v1/creators", creatorRoutes ); // Creator Onboarding & Storefront
 export default app;
