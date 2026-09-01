@@ -6,8 +6,7 @@ import {
     getPendingApplications, 
     updateCreatorStatus 
 } from "../controllers/creatorController.js";
-import { verifyAuth, verifyAdmin } from "../middleware/authMiddleware.js";
-import { verifyCreatorOrAdmin } from "../middleware/authMiddleware.js";
+import { authMiddleware, verifyCreatorOrAdmin } from "../middlewares/authMiddleware.js";
 
 const creatorRoute = express.Router();
 
@@ -17,15 +16,15 @@ creatorRoute.get("/storefront/:slug", getCreatorStorefront);
 
 // --- 2. ONBOARDING ROUTE ---
 // Standard students apply to become creators
-creatorRoute.post("/apply", verifyAuth, applyForCreator);
+creatorRoute.post("/apply", authMiddleware, applyForCreator);
 
 // --- 3. CREATOR DASHBOARD ROUTES ---
 // Protected: Only ACTIVE creators & Admins
-creatorRoute.get("/dashboard/stats", verifyAuth, verifyCreatorOrAdmin, getDashboardStats);
+creatorRoute.get("/dashboard/stats", authMiddleware, verifyCreatorOrAdmin, getDashboardStats);
 
 // --- 4. SUPERADMIN MODERATION ROUTES ---
 // Protected: Admins / SuperAdmins only
-creatorRoute.get("/admin/pending", verifyAuth, verifyAdmin, getPendingApplications);
-creatorRoute.patch("/admin/:creatorProfileId/status", verifyAuth, verifyAdmin, updateCreatorStatus);
+creatorRoute.get("/admin/pending", authMiddleware, verifyCreatorOrAdmin, getPendingApplications);
+creatorRoute.patch("/admin/:creatorProfileId/status", authMiddleware, verifyCreatorOrAdmin, updateCreatorStatus);
 
 export default creatorRoute;

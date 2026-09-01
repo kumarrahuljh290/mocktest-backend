@@ -8,14 +8,14 @@ import { verifyJwtToken } from "../config/jwt.js";
 export const authMiddleware = (req, res, next) => {
     try {
         let token = null;
-console.log("Auth Middleware: Checking for token in request...");
-console.log("Auth Header: ", req.get("Authorization") || req.headers.authorization);
-console.log("Cookies: ", req.cookies);
+        console.log("Auth Middleware: Checking for token in request...");
+        console.log("Auth Header: ", req.get("Authorization") || req.headers.authorization);
+        console.log("Cookies: ", req.cookies);
         // 1. Check Authorization header
         const authHeader = req.get("Authorization") || req.headers.authorization;
         if (authHeader && authHeader.startsWith("Bearer ")) {
             token = authHeader.split(" ")[1];
-        } 
+        }
         // 2. Fallback to HttpOnly Cookie if header not found
         else if (req.cookies && req.cookies.access_token) {
             token = req.cookies.access_token;
@@ -75,8 +75,8 @@ console.log("Cookies: ", req.cookies);
 
 export const verifyCreatorOrAdmin = async (req, res, next) => {
     try {
-        const user = req.user; 
-        
+        const user = req.user;
+
         if (!user) {
             return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
         }
@@ -115,7 +115,7 @@ export const verifyCreatorOrAdmin = async (req, res, next) => {
 
         // 3. Standard students get blocked here
         return res.status(403).json({ success: false, message: "Access denied. Requires Creator or Admin privileges." });
-        
+
     } catch (error) {
         console.error("[Creator Auth Error]:", error);
         res.status(500).json({ success: false, message: "Internal server error during authorization." });
