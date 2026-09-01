@@ -9,7 +9,7 @@ datasource db {
 }
 
 // ==========================================
-// 1. USER & IDENTITY MANAGEMENT
+// 1. USER, IDENTITY & CREATOR PROFILES
 // ==========================================
 
 model User {
@@ -23,18 +23,32 @@ model User {
   
   // Account Lifecycle Control
   accountStatus    AccountStatus @default(ACTIVE)
-  deactivatedAt    DateTime?     // When user deleted their own account
-  statusReason     String?       // Reason for admin suspension (e.g., "Fraudulent activity")
+  deactivatedAt    DateTime?     
+  statusReason     String?       
 
-  // Billing & External
   gatewayProfileId String?
   oauthAccounts    OAuthAccount[]
   
-  // Relations
+  // Base Relations
   subscriptions    Subscription[]
-  transactions     Transaction[]
   testAttempts     TestAttempt[]
   leaderboards     Leaderboard[]
+
+  // Creator CRM & Marketplace Relations
+  creatorProfile     CreatorProfile?
+  following          CreatorFollower[] @relation("StudentFollowing")
+  followers          CreatorFollower[] @relation("CreatorFollowers")
+  
+  // Content Ownership (Multi-Tenancy)
+  createdCollections Collection[]      @relation("CreatorCollections")
+  createdTests       Test[]            @relation("CreatorTests")
+  createdQuestions   Question[]        @relation("CreatorQuestions")
+  createdProducts    Product[]         @relation("CreatorProducts")
+  createdCoupons     Coupon[]          @relation("CreatorCoupons")
+  
+  // Financial Ledger
+  purchasesMade      Transaction[]     @relation("StudentPurchases")
+  salesReceived      Transaction[]     @relation("CreatorSales")
 
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -53,14 +67,65 @@ enum Role {
 
 enum AccountStatus {
   ACTIVE
-  DEACTIVATED_BY_USER  // Soft delete by the user
-  SUSPENDED_BY_ADMIN   // Banned or blocked by admin
+  DEACTIVATED_BY_USER
+  SUSPENDED_BY_ADMIN
+}
+
+model CreatorProfile {
+  id             String        @id @default(uuid())
+  userId         String        @unique
+  slug           String        @unique // e.g., "sharma-math-academy"
+  brandName      String        
+  bio            String?       @db.Text
+  logoUrl        String?
+  bannerUrl      String?
+  // NEW: KYC & Onboarding Fields
+  legalName       String?  // Needed for bank matching
+  kycDocumentType String?  // e.g., "AADHAAR", "PAN", "PASSPORT"
+  kycDocumentNum  String?  @unique // Encrypted or masked in UI
+  isKycVerified   Boolean  @default(false)
+  // Legal & Compliance (Copyright Protection)
+  acceptedCopyrightPolicyAt DateTime?  // Timestamp of when they agreed to the terms
+  status                    CreatorStatus @default(PENDING) // Admin approval workflow
+  // NEW: Razorpay Route Account ID (e.g., "acc_JM23xyz")
+  razorpayAccountId String? @unique
+  // Dynamic Commission Rate (Default 20% platform fee)
+  commissionRate Decimal       @default(20.00) @db.Decimal(5, 2) 
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([slug])
+  @@index([status])
+}
+
+enum CreatorStatus {
+  PENDING    // Waiting for admin approval
+  ACTIVE     // Live on the marketplace
+  SUSPENDED  // Banned due to copyright strike or fraud
+  REJECTED   // Initial application denied
+}
+
+model CreatorFollower {
+  id        String   @id @default(uuid())
+  studentId String
+  creatorId String
+
+  student   User     @relation("StudentFollowing", fields: [studentId], references: [id], onDelete: Cascade)
+  creator   User     @relation("CreatorFollowers", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, creatorId]) 
+  @@index([creatorId])
 }
 
 model OAuthAccount {
   id             String   @id @default(uuid())
   userId         String
-  provider       String   // google, github, apple
+  provider       String   
   providerUserId String
   accessToken    String?  @db.Text
   refreshToken   String?  @db.Text
@@ -76,7 +141,7 @@ model Otp {
   email     String
   code      String
   used      Boolean  @default(false)
-  type      String   // e.g., "REGISTER", "PASSWORD_RESET"
+  type      String   
   expiresAt DateTime
   createdAt DateTime @default(now())
 
@@ -85,65 +150,96 @@ model Otp {
 }
 
 // ==========================================
-// 2. MONETIZATION (DECOUPLED ARCHITECTURE)
+// 2. MONETIZATION & B2B2C FINANCIAL LEDGER
 // ==========================================
 
 model Product {
-  id              String   @id @default(uuid())
-  name            String   // e.g., "Banking Maha Pack 2026", "SBI PO Quant Sectional"
-  slug            String   @unique
-  description     String?  @db.Text
-  price           Decimal  @db.Decimal(10, 2)
-  discountPrice   Decimal? @db.Decimal(10, 2)
-  validityDays    Int      // e.g., 365 or 30
-  isActive        Boolean  @default(true)
-  features        Json?    // ["100+ Mocks", "Video Solutions"]
+  id            String   @id @default(uuid())
+  name          String 
+  slug          String   @unique
+  description   String?  @db.Text
+  price         Decimal  @db.Decimal(10, 2)
+  discountPrice Decimal? @db.Decimal(10, 2)
+  validityDays  Int 
+  isActive      Boolean  @default(true)
+  features      Json? 
   
-  // Relations
-  entitlements    ProductEntitlement[]
-  subscriptions   Subscription[]
+  // Multi-Tenancy (Owner of this product)
+  creatorId     String?  // Null means PrepMaster Official Product
+  creator       User?    @relation("CreatorProducts", fields: [creatorId], references: [id], onDelete: SetNull)
   
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  entitlements  ProductEntitlement[]
+  subscriptions Subscription[]
+  coupons       Coupon[] 
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([isActive])
+  @@index([creatorId])
 }
 
-// The core of the scalable architecture. 
-// A product can grant access to an entire Collection branch OR a single Test.
-model ProductEntitlement {
-  id              String      @id @default(uuid())
-  productId       String
-  collectionId    String?     // Unlocks this collection and ALL nested children
-  testId          String?     // Unlocks ONLY a specific test
+model Coupon {
+  id            String       @id @default(uuid())
+  code          String       @unique 
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2) 
   
-  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  collection      Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  test            Test?       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  maxUses       Int?         
+  usedCount     Int          @default(0)
+  isActive      Boolean      @default(true)
+  expiresAt     DateTime?
 
-  // A constraint should be enforced at the app level: MUST have either collectionId OR testId
+  // Restrict coupon to a specific creator or product
+  creatorId     String?      
+  productId     String?      
+
+  creator       User?        @relation("CreatorCoupons", fields: [creatorId], references: [id], onDelete: Cascade)
+  product       Product?     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+
+  createdAt     DateTime     @default(now())
+  
+  @@index([code])
+  @@index([creatorId])
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+model ProductEntitlement {
+  id           String      @id @default(uuid())
+  productId    String
+  collectionId String?     
+  testId       String?     
+  
+  product      Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  test         Test?       @relation(fields: [testId], references: [id], onDelete: Cascade)
+
   @@index([productId])
   @@index([collectionId])
   @@index([testId])
 }
 
 model Subscription {
-  id              String             @id @default(uuid())
-  userId          String
-  productId       String
-  status          SubscriptionStatus @default(ACTIVE)
+  id           String             @id @default(uuid())
+  userId       String
+  productId    String
+  status       SubscriptionStatus @default(ACTIVE)
   
-  startDate       DateTime           @default(now())
-  endDate         DateTime
+  startDate    DateTime           @default(now())
+  endDate      DateTime
   
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product         Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
-  transactions    Transaction[]
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product      Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
 
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
-  // Extremely important index for fast access resolution check
   @@index([userId, status, endDate]) 
 }
 
@@ -153,24 +249,37 @@ enum SubscriptionStatus {
   CANCELED
 }
 
+// Immutable Financial Ledger
 model Transaction {
   id                 String            @id @default(uuid())
-  userId             String
+  userId             String            
   subscriptionId     String?
-  amount             Decimal           @db.Decimal(10, 2)
+  
   currency           String            @default("INR")
   status             TransactionStatus @default(PENDING)
-  
   gatewayReferenceId String            @unique 
-  couponCode         String?
-  discountApplied    Decimal?          @db.Decimal(10, 2)
   
-  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Ledger Math
+  baseAmount         Decimal           @db.Decimal(10, 2) 
+  discountApplied    Decimal?          @db.Decimal(10, 2) 
+  finalAmount        Decimal           @db.Decimal(10, 2) 
+  
+  // Revenue Split (Calculated from finalAmount)
+  creatorId          String?           // Null = PrepMaster Official Sale
+  platformShare      Decimal?          @db.Decimal(10, 2) 
+  creatorShare       Decimal?          @db.Decimal(10, 2) 
+  
+  couponId           String?
+
+  user               User              @relation("StudentPurchases", fields: [userId], references: [id], onDelete: Cascade)
+  creator            User?             @relation("CreatorSales", fields: [creatorId], references: [id], onDelete: SetNull)
   subscription       Subscription?     @relation(fields: [subscriptionId], references: [id])
+  coupon             Coupon?           @relation(fields: [couponId], references: [id])
 
   createdAt          DateTime          @default(now())
 
   @@index([userId, status])
+  @@index([creatorId, status]) 
 }
 
 enum TransactionStatus {
@@ -181,79 +290,83 @@ enum TransactionStatus {
 }
 
 // ==========================================
-// 3. CONTENT GRAPH (INFINITE NESTING)
+// 3. CONTENT GRAPH & MULTI-TENANCY
 // ==========================================
 
-// Replaces Category/Exam/TestSeries with a single recursive tree
 model Collection {
-  id              String           @id @default(uuid())
-  name            String           // e.g., "Banking", "SBI PO", "Prelims Mocks"
-  slug            String           @unique
-  type            CollectionType   
+  id            String          @id @default(uuid())
+  name          String 
+  slug          String          @unique
+  type          CollectionType 
   
-  // Self-referencing relationship (Adjacency List)
-  parentId        String?
-  parent          Collection?      @relation("CollectionHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children        Collection[]     @relation("CollectionHierarchy")
+  creatorId     String?  
+  creator       User?           @relation("CreatorCollections", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  parentId      String?
+  parent        Collection?     @relation("CollectionHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Collection[]    @relation("CollectionHierarchy")
   
-  tests           CollectionTest[]
-  entitlements    ProductEntitlement[]
+  tests         CollectionTest[]
+  entitlements  ProductEntitlement[]
   
-  isPublished     Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  isPublished   Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([parentId])
   @@index([type])
+  @@index([creatorId])
 }
 
 enum CollectionType {
-  ROOT_CATEGORY    // e.g., Banking, SSC
-  EXAM             // e.g., SBI PO, RRB NTPC
-  TEST_SERIES      // e.g., Prelims Mocks 2026
-  SUBJECT_BUNDLE   // e.g., Quant Sectionals
+  ROOT_CATEGORY 
+  EXAM          
+  TEST_SERIES   
+  SUBJECT_BUNDLE
 }
 
-// Pivot table mapping Tests to Collections
 model CollectionTest {
-  collectionId    String
-  testId          String
-  order           Int         @default(0) // Order of test within the collection
+  collectionId String
+  testId       String
+  order        Int        @default(0) 
   
-  collection      Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  test            Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  test         Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
 
   @@id([collectionId, testId])
   @@index([testId])
 }
 
 model Test {
-  id                 String           @id @default(uuid())
+  id                 String             @id @default(uuid())
   title              String
-  slug               String           @unique
-  type               TestType         @default(FULL_MOCK)
+  slug               String             @unique
+  type               TestType           @default(FULL_MOCK)
   
-  totalDuration      Int              // In seconds
+  creatorId          String?  
+  creator            User?              @relation("CreatorTests", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  totalDuration      Int                
   totalMarks         Int
-  availableLanguages String[]         // ["EN", "HI"]
-  calculatorType     Calculator       @default(NONE)
-  strictNavigation   Boolean          @default(false) 
+  availableLanguages String[]           
+  calculatorType     Calculator         @default(NONE)
+  strictNavigation   Boolean            @default(false) 
   
-  // Time window for LIVE tests
   liveStartTime      DateTime?
   liveEndTime        DateTime?
   
   collections        CollectionTest[]
-  entitlements       ProductEntitlement[] // Direct unlocks
+  entitlements       ProductEntitlement[] 
   
   sections           TestSection[]
   attempts           TestAttempt[]
   leaderboards       Leaderboard[]
   
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@index([type])
+  @@index([creatorId])
 }
 
 enum TestType {
@@ -271,14 +384,14 @@ enum Calculator {
 }
 
 // ==========================================
-// 4. TEST ENGINE & QUESTION BANK
+// 4. QUESTION BANK (SILOED IP PROTECTION)
 // ==========================================
 
 model TestSection {
   id            String         @id @default(uuid())
   testId        String
   name          String         
-  duration      Int?           // Sectional timing constraint
+  duration      Int?           
   order         Int
   cutoffMarks   Decimal?       @db.Decimal(6, 2)
   
@@ -290,8 +403,8 @@ model TestSection {
 
 model QuestionContext {
   id         String     @id @default(uuid())
-  title      String?    // e.g., "DI: Company Sales 2020-2022"
-  content    Json       // Multilingual context
+  title      String?    
+  content    Json       
   mediaUrls  String[]
   questions  Question[] 
   
@@ -301,6 +414,10 @@ model QuestionContext {
 
 model Question {
   id              String           @id @default(uuid())
+  
+  creatorId       String?          
+  creator         User?            @relation("CreatorQuestions", fields: [creatorId], references: [id], onDelete: SetNull)
+
   subject         String           
   topic           String           
   difficulty      Difficulty       @default(MEDIUM)
@@ -310,8 +427,8 @@ model Question {
   contextId       String?
   context         QuestionContext? @relation(fields: [contextId], references: [id], onDelete: SetNull)
   
-  content         Json             // Multilingual question text
-  solution        Json?            // Multilingual explanation / Video URL
+  content         Json             
+  solution        Json?            
   
   options         Option[]
   testOccurrences TestQuestion[]
@@ -319,6 +436,7 @@ model Question {
   createdAt       DateTime         @default(now())
 
   @@index([subject, topic])
+  @@index([creatorId])
 }
 
 enum QuestionType {
@@ -363,7 +481,7 @@ model TestQuestion {
 }
 
 // ==========================================
-// 5. ATTEMPT & ANALYTICS (WRITE-HEAVY ISOLATION)
+// 5. ATTEMPT & ANALYTICS
 // ==========================================
 
 model TestAttempt {
@@ -371,7 +489,7 @@ model TestAttempt {
   userId        String
   testId        String
   status        AttemptStatus
-  testMode      AttemptMode   @default(PRACTICE) // To isolate Live from Practice Leaderboards
+  testMode      AttemptMode   @default(PRACTICE) 
   
   startedAt     DateTime      @default(now())
   submittedAt   DateTime?
@@ -379,13 +497,12 @@ model TestAttempt {
   score         Decimal?      @db.Decimal(6, 2)
   accuracy      Decimal?      @db.Decimal(5, 2)
   percentile    Decimal?      @db.Decimal(5, 2)
-  timeSpent     Int?          // Total seconds
+  timeSpent     Int?          
   
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   test          Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
   answers       UserAnswer[]
   
-  // Crucial composite index for analytics & fetching history quickly
   @@index([userId, testId, status])
   @@index([testId, testMode])
 }
@@ -403,24 +520,22 @@ enum AttemptMode {
 }
 
 model UserAnswer {
-  id               String        @id @default(uuid())
-  attemptId        String
-  testQuestionId   String
+  id                String        @id @default(uuid())
+  attemptId         String
+  testQuestionId    String
   
-  state            QuestionState @default(UNVISITED)
+  state             QuestionState @default(UNVISITED)
+  selectedOptionIds String[]      
+  textResponse      String?       
   
-  selectedOptionIds String[]     // Holds selections
-  textResponse     String?       // For NAT types
+  timeTakenSec      Int           @default(0)
+  isCorrect         Boolean?
+  marksAwarded      Decimal?      @db.Decimal(4, 2)
   
-  timeTakenSec     Int           @default(0)
-  isCorrect        Boolean?
-  marksAwarded     Decimal?      @db.Decimal(4, 2)
-  
-  attempt          TestAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  testQuestion     TestQuestion  @relation(fields: [testQuestionId], references: [id])
+  attempt           TestAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestion      TestQuestion  @relation(fields: [testQuestionId], references: [id])
 
   @@unique([attemptId, testQuestionId])
-  // Index on state allows fast calculation of "How many marked for review?"
   @@index([attemptId, state])
 }
 

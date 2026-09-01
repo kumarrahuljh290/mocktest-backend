@@ -67,6 +67,61 @@ console.log("Cookies: ", req.cookies);
     }
 };
 
+
+/**
+ * Enterprise Middleware: Allows Admins, SuperAdmins, and ACTIVE Creators.
+ * Assumes `req.user` is already populated by your primary authentication middleware.
+ */
+
+export const verifyCreatorOrAdmin = async (req, res, next) => {
+    try {
+        const user = req.user; 
+        
+        if (!user) {
+            return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
+        }
+
+        // 1. Admins have universal bypass access
+        if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+            return next();
+        }
+
+        // 2. Creator Validation Workflow
+        if (user.role === 'CONTENT_CREATOR') {
+            // Fetch lightweight profile state from DB
+            const profile = await prisma.creatorProfile.findUnique({
+                where: { userId: user.id },
+                select: { status: true }
+            });
+
+            if (!profile) {
+                return res.status(403).json({ success: false, message: "Creator profile not found." });
+            }
+
+            // Legal & Compliance Checks
+            if (profile.status === 'SUSPENDED') {
+                return res.status(403).json({ success: false, message: "ACCOUNT_SUSPENDED: Your creator privileges have been revoked." });
+            }
+            if (profile.status === 'PENDING') {
+                return res.status(403).json({ success: false, message: "ACCOUNT_PENDING: Your creator application is still under review by PrepMaster." });
+            }
+            if (profile.status === 'REJECTED') {
+                return res.status(403).json({ success: false, message: "ACCOUNT_REJECTED: Your application to become a creator was denied." });
+            }
+
+            // Status is ACTIVE. They are good to go!
+            return next();
+        }
+
+        // 3. Standard students get blocked here
+        return res.status(403).json({ success: false, message: "Access denied. Requires Creator or Admin privileges." });
+        
+    } catch (error) {
+        console.error("[Creator Auth Error]:", error);
+        res.status(500).json({ success: false, message: "Internal server error during authorization." });
+    }
+};
+
 /**
  * Role-Based Access Control (RBAC) Middleware
  * Ensures only authorized roles (e.g. ADMIN, CONTENT_CREATOR) access specific endpoints.

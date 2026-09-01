@@ -23,7 +23,7 @@ export class AuthService {
                     name,
                     email,
                     passwordHash: hashedPassword,
-                    role: "STUDENT", // Updated to match new schema
+                    role: "STUDENT", 
                 }
             });
 
@@ -50,7 +50,20 @@ export class AuthService {
     }
 
     static async loginUser({ email, password }) {
-        const user = await prisma.user.findUnique({ where: { email } });
+        // NEW: Fetch the creator profile along with the user data
+        const user = await prisma.user.findUnique({ 
+            where: { email },
+            include: {
+                creatorProfile: {
+                    select: {
+                        slug: true,
+                        status: true,
+                        brandName: true,
+                        razorpayAccountId: true // Just to check existence, not exposing to frontend
+                    }
+                }
+            }
+        });
 
         // Generic error message to prevent email enumeration
         if (!user || !user.passwordHash || !(await compareValue(password, user.passwordHash))) {
@@ -59,7 +72,6 @@ export class AuthService {
             throw error;
         }
 
-        // NEW: Check if the account is suspended or deactivated
         if (user.accountStatus === "SUSPENDED_BY_ADMIN") {
             const error = new Error("This account has been suspended.");
             error.code = "ACCOUNT_SUSPENDED";
@@ -72,7 +84,21 @@ export class AuthService {
             throw error;
         }
 
-        const { passwordHash: _, ...safeUser } = user;
+        const { passwordHash: _, creatorProfile, ...safeUser } = user;
+
+        // NEW: Inject Creator state smoothly for the frontend
+        if (safeUser.role === 'CONTENT_CREATOR' && creatorProfile) {
+            safeUser.creatorParams = {
+                isProfileComplete: true,
+                slug: creatorProfile.slug,
+                brandName: creatorProfile.brandName,
+                status: creatorProfile.status, // "PENDING", "ACTIVE", "SUSPENDED"
+                hasBankDetailsLinked: !!creatorProfile.razorpayAccountId // returns true/false
+            };
+        } else {
+            safeUser.creatorParams = null;
+        }
+
         return safeUser;
     }
 
@@ -81,18 +107,26 @@ export class AuthService {
     // ==========================================
     static async handleOAuthLogin({ provider, providerUserId, email, name, tokens }) {
         return await prisma.$transaction(async (tx) => {
-            // 1. Find or create the user
-            let user = await tx.user.findUnique({ where: { email } });
+            // 1. Find or create the user (INCLUDE creatorProfile for OAuth teachers!)
+            let user = await tx.user.findUnique({ 
+                where: { email },
+                include: {
+                    creatorProfile: {
+                        select: { slug: true, status: true, brandName: true, razorpayAccountId: true }
+                    }
+                }
+            });
 
             if (!user) {
                 user = await tx.user.create({
                     data: {
                         email,
                         name,
-                        isVerified: true, // OAuth providers already verify emails
+                        isVerified: true, 
                         role: "STUDENT"
                     }
                 });
+                user.creatorProfile = null; // New users are strictly students
             }
 
             // 2. Upsert the OAuth Account linkage
@@ -118,7 +152,22 @@ export class AuthService {
                 }
             });
 
-            return user;
+            // 3. Format the response with the exact same payload structure as regular login
+            const { creatorProfile, ...safeUser } = user;
+
+            if (safeUser.role === 'CONTENT_CREATOR' && creatorProfile) {
+                safeUser.creatorParams = {
+                    isProfileComplete: true,
+                    slug: creatorProfile.slug,
+                    brandName: creatorProfile.brandName,
+                    status: creatorProfile.status,
+                    hasBankDetailsLinked: !!creatorProfile.razorpayAccountId
+                };
+            } else {
+                safeUser.creatorParams = null;
+            }
+
+            return safeUser;
         });
     }
 
@@ -143,7 +192,7 @@ export class AuthService {
     }
 
     // 3. Verify the actual code
-    const isValid = await compareValue(otp, record.code); // assuming bcrypt.compare
+    const isValid = await compareValue(otp, record.code); 
     if (!isValid) {
         const err = new Error("Invalid OTP provided.");
         err.code = "INVALID_OTP";
@@ -161,7 +210,6 @@ export class AuthService {
         })
     ]);
 
-    // 5. Return the user object so the controller can generate the JWT cookie!
     return updatedUser;
 }
 
@@ -180,7 +228,6 @@ export class AuthService {
             },
         });
 
-        // CHANGE THIS: Add try/catch and await so we can see the exact email error in Render logs
         try {
             console.log("Attempting to send email via Nodemailer...");
             await sendOtpEmail(email, otp);

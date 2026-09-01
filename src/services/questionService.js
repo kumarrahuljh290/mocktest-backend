@@ -18,9 +18,18 @@ export class QuestionService {
     // ==========================================
     // 2. SINGLE QUESTION CREATION
     // ==========================================
-    static async createQuestion(data) {
-        // OPTIMIZATION: Using Prisma's Nested Writes. 
-        // This inserts the Question and Options in a single DB roundtrip.
+    /**
+     * NEW: Takes `user` as the second parameter to stamp ownership.
+     */
+    static async createQuestion(data, user) {
+        
+        let assignedCreatorId = null;
+        if (user?.role === 'CONTENT_CREATOR') {
+            assignedCreatorId = user.id; // Enforce Creator Lock
+        } else if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+            assignedCreatorId = data.creatorId || null; // Allow Admins to assign or leave as PrepMaster Official
+        }
+
         const optionsData = data.options && data.options.length > 0 
             ? data.options.map((opt, index) => ({
                 content: opt.content,
@@ -40,7 +49,8 @@ export class QuestionService {
                 contextId: data.contextId || null,
                 mediaUrls: data.mediaUrls || [],
                 
-                // Nested write: Creates options automatically linked to this question ID
+                creatorId: assignedCreatorId, // <--- IP Protection Stamp
+                
                 ...(optionsData.length > 0 && {
                     options: { create: optionsData }
                 })
@@ -52,13 +62,24 @@ export class QuestionService {
     // ==========================================
     // 3. BULK UPLOAD (HIGHLY OPTIMIZED)
     // ==========================================
-    static async bulkCreateQuestions(questionsArray) {
-        // We use a transaction to ensure either ALL 1,000 questions upload, or NONE do.
-        // This prevents data corruption on partial network failures.
+    /**
+     * NEW: Takes `user` parameter to stamp ownership across thousands of questions instantly.
+     */
+    static async bulkCreateQuestions(questionsArray, user) {
+        
+        let assignedCreatorId = null;
+        if (user?.role === 'CONTENT_CREATOR') {
+            assignedCreatorId = user.id;
+        }
+
         return await prisma.$transaction(async (tx) => {
             const createdQuestionIds = [];
 
             for (const data of questionsArray) {
+                
+                // If it's an admin doing the bulk upload, allow them to pass a specific creatorId per question in the array
+                const specificCreatorId = user?.role === 'ADMIN' ? (data.creatorId || null) : assignedCreatorId;
+
                 const optionsData = data.options && data.options.length > 0 
                     ? data.options.map((opt, index) => ({
                         content: opt.content,
@@ -78,7 +99,8 @@ export class QuestionService {
                         contextId: data.contextId || null,
                         mediaUrls: data.mediaUrls || [],
                         
-                        // Nested write inside transaction
+                        creatorId: specificCreatorId, // <--- IP Protection Stamp
+                        
                         ...(optionsData.length > 0 && {
                             options: { create: optionsData }
                         })
@@ -94,16 +116,18 @@ export class QuestionService {
                 questionIds: createdQuestionIds
             };
         }, {
-            // Bulk uploads take time, so we extend the transaction timeout
             maxWait: 5000, 
             timeout: 20000 
         });
     }
 
     // ==========================================
-    // 4. FETCHING & FILTERING FOR ADMINS
+    // 4. FETCHING & FILTERING (STRICT ISOLATION)
     // ==========================================
-    static async getQuestions(filters = {}) {
+    /**
+     * NEW: Takes `user` parameter to filter the result set.
+     */
+    static async getQuestions(filters = {}, user) {
         const { page = 1, limit = 20, subject, topic, difficulty, type } = filters;
         const skip = (page - 1) * limit;
 
@@ -114,7 +138,17 @@ export class QuestionService {
             ...(type && { type }),
         };
 
-        // Run count and fetch concurrently
+        // MULTI-TENANCY ISOLATION:
+        if (user?.role === 'CONTENT_CREATOR') {
+            // A creator can ONLY ever see their own questions
+            where.creatorId = user.id;
+        } else if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+            // An admin can filter by a specific creator, or view PrepMaster official (null)
+            if (filters.creatorId !== undefined) {
+                where.creatorId = filters.creatorId === 'null' ? null : filters.creatorId;
+            }
+        }
+
         const [questions, total] = await Promise.all([
             prisma.question.findMany({
                 where,

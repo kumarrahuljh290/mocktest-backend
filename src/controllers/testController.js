@@ -136,7 +136,8 @@ export const createTest = async (req, res) => {
     try {
         // req.body now accepts `collectionIds` array instead of relying on a URL param.
         // This allows you to map a test to "Banking Maha Pack" AND "Quant Pack" simultaneously.
-        const test = await TestService.createTestWithSections(req.body);
+        // Pass req.user as the second argument!
+        const test = await TestService.createTestWithSections(req.body, req.user); 
         res.status(201).json({ success: true, data: test });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to create test: " + error.message });

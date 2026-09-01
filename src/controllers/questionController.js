@@ -72,10 +72,13 @@ export const getQuestions = async (req, res) => {
             subject: req.query.subject,
             topic: req.query.topic,
             difficulty: req.query.difficulty,
-            type: req.query.type // NEW: Added type filtering (e.g., SINGLE_CHOICE, NUMERIC_INPUT)
+            type: req.query.type, 
+            creatorId: req.query.creatorId // NEW: Allows Admins to filter by specific creator or 'null' for official content
         };
 
-        const result = await QuestionService.getQuestions(filters);
+        // NEW: Pass req.user as the second argument to enforce strict Data Isolation
+        const result = await QuestionService.getQuestions(filters, req.user);
+        
         res.status(200).json({ success: true, ...result });
     } catch (error) {
         console.error("[Fetch Questions Error]:", error);

@@ -3,29 +3,25 @@ import slugify from "slugify";
 import crypto from "crypto";
 
 export class TestService {
-    // ==========================================
-    // 1. SECURITY & ENTITLEMENT RESOLUTION
-    // ==========================================
-    // ==========================================
-    // 5. COLLECTION MANAGEMENT (ADMIN)
+// ==========================================
+    // 1. COLLECTION MANAGEMENT (MULTI-TENANT)
     // ==========================================
 
     /**
-     * Creates a new Collection (Category, Exam, Test Series, etc.)
-     * Supports infinite nesting via parentId.
+     * Creates a new Collection.
+     * NEW: Automatically assigns the creatorId if the user is a CONTENT_CREATOR.
      */
-    static async createCollection(collectionData) {
-        const { name, type, parentId, isPublished } = collectionData;
+    static async createCollection(collectionData, user) {
+        const { name, type, parentId, isPublished, creatorId: requestedCreatorId } = collectionData;
 
         if (!name || !type) {
             throw new Error("Missing required fields: 'name' and 'type' are required.");
         }
 
-        // Generate a unique slug to prevent collisions (e.g., "sbi-po-prelims-8f7a6b")
+        // Generate a unique slug to prevent collisions
         const baseSlug = slugify(name, { lower: true, strict: true });
         const uniqueSlug = `${baseSlug}-${crypto.randomBytes(4).toString("hex")}`;
 
-        // If a parentId is provided, verify it actually exists first to provide a clean error
         if (parentId) {
             const parentExists = await prisma.collection.findUnique({ where: { id: parentId } });
             if (!parentExists) {
@@ -33,31 +29,36 @@ export class TestService {
             }
         }
 
-        // Create the collection
-        const collection = await prisma.collection.create({
+        // MULTI-TENANCY LOCK: 
+        // If a creator makes this, force their ID. If admin makes this, allow them to assign an ID or leave null (PrepMaster Official).
+        let assignedCreatorId = null;
+        if (user?.role === 'CONTENT_CREATOR') {
+            assignedCreatorId = user.id;
+        } else if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+            assignedCreatorId = requestedCreatorId || null;
+        }
+
+        return await prisma.collection.create({
             data: {
                 name,
                 slug: uniqueSlug,
                 type,
                 parentId: parentId || null,
                 isPublished: isPublished || false,
+                creatorId: assignedCreatorId // <--- Data Ownership Stamped
             },
         });
-
-        return collection;
     }
 
     /**
      * Fetch a lightweight list of collections.
-     * Ideal for listing pages, home screens, and trending grids.
+     * NEW: Supports filtering by creatorId for isolation on Dashboards and Storefronts.
      */
     static async getAllCollections(filters = {}) {
-        const { parentId, type, isPublished } = filters;
+        const { parentId, type, isPublished, creatorId } = filters;
 
-        // Build query conditions dynamically
         const where = {};
         
-        // If parentId is explicitly 'null', fetch root collections
         if (parentId !== undefined) {
             where.parentId = parentId === 'null' ? null : parentId;
         }
@@ -65,49 +66,40 @@ export class TestService {
         if (isPublished !== undefined) {
             where.isPublished = isPublished === 'true' || isPublished === true;
         }
+        
+        // MULTI-TENANCY FILTER: Crucial for Creator Dashboard & Public Storefront
+        if (creatorId !== undefined) {
+            where.creatorId = creatorId === 'null' ? null : creatorId;
+        }
 
-        const collections = await prisma.collection.findMany({
+        return await prisma.collection.findMany({
             where,
-            orderBy: { createdAt: 'desc' }, // Show newest first
+            orderBy: { createdAt: 'desc' }, 
             select: {
-                id: true,
-                name: true,
-                slug: true,
-                type: true,
-                parentId: true,
-                isPublished: true,
-                // MAGIC TRICK: Get counts without fetching the actual heavy data!
+                id: true, name: true, slug: true, type: true, 
+                parentId: true, isPublished: true, creatorId: true,
                 _count: {
-                    select: {
-                        children: true, // Number of sub-categories inside
-                        tests: false     // Number of tests mapped to this collection
-                    }
+                    select: { children: true, tests: false }
                 }
             }
         });
-
-        return collections;
     }
-    /**
-     * Fetch a single collection and its immediate contents (children & tests)
-     */
+
     static async getCollectionDetails(collectionId) {
         const collection = await prisma.collection.findUnique({
             where: { id: collectionId },
             include: {
-                // 1. Fetch Sub-collections (Folders inside this folder)
                 children: {
                     where: { isPublished: true },
                     select: { id: true, name: true, type: true, slug: true }
                 },
-                // 2. Fetch Actual Tests mapped to this collection
                 tests: {
                     orderBy: { order: 'asc' },
                     include: {
                         test: {
                             select: { 
                                 id: true, title: true, type: true, 
-                                totalDuration: true, totalMarks: true 
+                                totalDuration: true, totalMarks: true, creatorId: true 
                             }
                         }
                     }
@@ -119,16 +111,14 @@ export class TestService {
         return collection;
     }
 
+    // ==========================================
+    // 2. SECURITY & ENTITLEMENT RESOLUTION
+    // ==========================================
 
-    /**
-     * Enterprise Access Check using Recursive CTE.
-     * Resolves access if the user bought the exact test OR any parent collection nested infinitely deep.
-     */
     static async verifyStudentAccess(userId, testId) {
-        // Highly optimized raw SQL for recursive graph traversal
+        // (Your existing highly-optimized raw SQL query remains exactly the same!)
         const accessCheck = await prisma.$queryRaw`
             WITH RECURSIVE CollectionTree AS (
-                -- Base Case: Get all collections the user has DIRECTly unlocked via active subscriptions
                 SELECT c.id 
                 FROM "Collection" c
                 JOIN "ProductEntitlement" pe ON c.id = pe."collectionId"
@@ -136,23 +126,16 @@ export class TestService {
                 WHERE s."userId" = ${userId}
                   AND s.status = 'ACTIVE' 
                   AND s."endDate" > NOW()
-                  
                 UNION ALL
-                
-                -- Recursive Case: Get all children of the unlocked collections
                 SELECT child.id 
                 FROM "Collection" child
                 INNER JOIN CollectionTree ct ON child."parentId" = ct.id
             )
             SELECT EXISTS (
-                -- Check 1: Does the user have a direct entitlement to this test?
                 SELECT 1 FROM "ProductEntitlement" pe
                 JOIN "Subscription" s ON pe."productId" = s."productId"
                 WHERE s."userId" = ${userId} AND s.status = 'ACTIVE' AND s."endDate" > NOW() AND pe."testId" = ${testId}
-                
                 UNION
-                
-                -- Check 2: Is the test mapped to any collection in the user's unlocked tree?
                 SELECT 1 FROM "CollectionTest" ct
                 WHERE ct."testId" = ${testId} AND ct."collectionId" IN (SELECT id FROM CollectionTree)
             ) AS "hasAccess";
@@ -163,7 +146,6 @@ export class TestService {
         }
         return true;
     }
-
     // ==========================================
     // 2. EXAM ENGINE: START, SYNC, SUBMIT
     // ==========================================
@@ -364,11 +346,23 @@ export class TestService {
     }
 
     // ==========================================
-    // 4. CONTENT MANAGEMENT (ADMIN)
+    // 3. CONTENT MANAGEMENT (TEST CREATION)
     // ==========================================
 
-    static async createTestWithSections(testData) {
+    /**
+     * Creates a full test with sections and maps questions.
+     * NEW: Enforces creator ownership.
+     */
+    static async createTestWithSections(testData, user) {
         const slug = slugify(testData.title, { lower: true, strict: true }) + "-" + crypto.randomBytes(4).toString("hex");
+
+        // MULTI-TENANCY LOCK
+        let assignedCreatorId = null;
+        if (user?.role === 'CONTENT_CREATOR') {
+            assignedCreatorId = user.id;
+        } else if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+            assignedCreatorId = testData.creatorId || null;
+        }
 
         return await prisma.$transaction(async (tx) => {
             const test = await tx.test.create({
@@ -382,10 +376,10 @@ export class TestService {
                     availableLanguages: testData.availableLanguages || ["EN"],
                     liveStartTime: testData.liveStartTime || null,
                     liveEndTime: testData.liveEndTime || null,
+                    creatorId: assignedCreatorId // <--- Data Ownership Stamped
                 }
             });
 
-            // Map Test to Collections if provided
             if (testData.collectionIds?.length) {
                 await tx.collectionTest.createMany({
                     data: testData.collectionIds.map(cId => ({
